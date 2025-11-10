@@ -78,9 +78,28 @@
 								<span class="group-output">Provide function decode(bits) { ... } that returns a value.</span>
 							</div>
 							<div id="gsFlagsWrap" class="group-decoder" hidden>
+								<label class="field">
+									<span>Flags input mode</span>
+									<select id="gsFlagsMode" class="group-type">
+										<option value="json">JSON</option>
+										<option value="fields">Fields</option>
+									</select>
+								</label>
 								<textarea id="gsFlagsDescriptions" class="decoder-input" spellcheck="false" placeholder='{\"0\":\"Zero Flag\",\"1\":\"Sign Flag\"}'></textarea>
 								<div class="field-actions">
 									<button id="gsFlagsPretty" class="btn-secondary" type="button">Pretty Print</button>
+								</div>
+								<div id="gsFlagsFields" class="flags-fields" hidden>
+									<div class="flags-fields-head">
+										<span>Bit</span>
+										<span>On 1</span>
+										<span>On 0 (optional)</span>
+										<span></span>
+									</div>
+									<div id="gsFlagsList" class="flags-fields-list"></div>
+									<div class="flags-fields-actions">
+										<button id="gsAddFlagRow" class="btn-secondary" type="button">Add Flag</button>
+									</div>
 								</div>
 								<span class="group-output">Provide JSON mapping of bit index to description. Supports "On|Off" or {"1":"On","0":"Off"}, e.g. {"1":"Carry|No Carry","5":{"1":"Overflow","0":"No Overflow"}}.</span>
 							</div>

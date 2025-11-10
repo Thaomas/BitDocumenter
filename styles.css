@@ -315,6 +315,51 @@ main { flex: 1; }
 	font-size: 12px;
 }
 
+.flags-fields {
+	display: grid;
+	gap: 8px;
+}
+.flags-fields-head {
+	display: grid;
+	grid-template-columns: 60px 1fr 1fr 80px;
+	gap: 8px;
+	align-items: center;
+	color: var(--muted);
+	font-size: 12px;
+}
+.flags-fields-list {
+	display: grid;
+	gap: 6px;
+}
+.flags-row {
+	display: grid;
+	grid-template-columns: 60px 1fr 1fr 80px;
+	gap: 8px;
+	align-items: center;
+}
+.flags-row input[type="number"],
+.flags-row input[type="text"] {
+	width: 100%;
+	padding: 8px 10px;
+	border-radius: 8px;
+	border: 1px solid var(--border);
+	background: var(--panel);
+	color: var(--text);
+	box-shadow: var(--shadow);
+}
+.flags-row .row-remove {
+	background: transparent;
+	color: var(--muted);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	padding: 6px 10px;
+	cursor: pointer;
+}
+.flags-fields-actions {
+	display: flex;
+	justify-content: flex-end;
+}
+
 .modal { display: none; }
 .modal.open { display: block; }
 .modal-backdrop {

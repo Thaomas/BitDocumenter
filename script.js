@@ -225,6 +225,10 @@ document.addEventListener("DOMContentLoaded", () => {
 			const decoderEl = document.getElementById("gsDecoder");
 			const flagsWrap = document.getElementById("gsFlagsWrap");
 			const flagsEl = document.getElementById("gsFlagsDescriptions");
+			const flagsModeEl = document.getElementById("gsFlagsMode");
+			const flagsFieldsWrap = document.getElementById("gsFlagsFields");
+			const flagsListEl = document.getElementById("gsFlagsList");
+			const addFlagRowBtn = document.getElementById("gsAddFlagRow");
 			const flagsPrettyEl = document.getElementById("gsFlagsPretty");
 			const saveBtn = document.getElementById("gsSave");
 			const deleteBtn = document.getElementById("gsDelete");
@@ -237,6 +241,97 @@ document.addEventListener("DOMContentLoaded", () => {
 			decoderWrap.hidden = group.type !== "value";
 			flagsWrap.hidden = group.type !== "flags";
 
+			// Flags fields helpers
+			function parseFlagsMapFromJson(jsonText) {
+				try {
+					const obj = JSON.parse(jsonText || "{}");
+					if (!obj || typeof obj !== "object") return {};
+					return obj;
+				} catch {
+					return {};
+				}
+			}
+			function addFlagRow(bitIdx = "", onLabel = "", offLabel = "") {
+				if (!flagsListEl) return;
+				const row = document.createElement("div");
+				row.className = "flags-row";
+				const bit = document.createElement("input");
+				bit.type = "number";
+				bit.min = "0";
+				bit.placeholder = "0";
+				bit.value = bitIdx === "" ? "" : String(bitIdx);
+				const on = document.createElement("input");
+				on.type = "text";
+				on.placeholder = "On 1 label (optional)";
+				on.value = onLabel;
+				const off = document.createElement("input");
+				off.type = "text";
+				off.placeholder = "On 0 label (optional)";
+				off.value = offLabel;
+				const remove = document.createElement("button");
+				remove.type = "button";
+				remove.className = "row-remove";
+				remove.textContent = "Remove";
+				remove.addEventListener("click", () => row.remove());
+				row.appendChild(bit);
+				row.appendChild(on);
+				row.appendChild(off);
+				row.appendChild(remove);
+				flagsListEl.appendChild(row);
+			}
+			function buildFieldsFromMap(map, totalBits) {
+				if (!flagsListEl) return;
+				flagsListEl.innerHTML = "";
+				const keysSet = new Set(Object.keys(map).filter(k => Number.isFinite(Number(k))));
+				const count = Number.isFinite(Number(totalBits)) ? Number(totalBits) : 0;
+				// Always render rows for all bit indices in the group
+				for (let i = 0; i < count; i++) {
+					const k = String(i);
+					const v = keysSet.has(k) ? map[k] : undefined;
+					let on = "", off = "";
+					if (v && typeof v === "object" && !Array.isArray(v)) {
+						on = typeof v["1"] === "string" ? v["1"] : "";
+						off = typeof v["0"] === "string" ? v["0"] : "";
+					} else if (typeof v === "string") {
+						if (v.includes("|")) {
+							const [onText, offText = ""] = v.split("|");
+							on = onText;
+							off = offText;
+						} else {
+							on = v;
+						}
+					}
+					addFlagRow(i, on, off);
+				}
+			}
+			function getMapFromFields() {
+				if (!flagsListEl) return {};
+				/** @type {Record<string, any>} */
+				const out = {};
+				const rows = flagsListEl.querySelectorAll(".flags-row");
+				rows.forEach(row => {
+					const inputs = row.querySelectorAll("input");
+					const bitStr = inputs[0].value.trim();
+					const on = inputs[1].value.trim();
+					const off = inputs[2].value.trim();
+					if (bitStr === "" || !/^\d+$/.test(bitStr)) return;
+					const idx = Number(bitStr);
+					if (!Number.isFinite(idx)) return;
+					if (on && off) out[String(idx)] = { "1": on, "0": off };
+					else if (on) out[String(idx)] = on;
+					else if (off) out[String(idx)] = { "0": off };
+				});
+				return out;
+			}
+			function setFlagsMode(mode) {
+				if (!flagsModeEl || !flagsFieldsWrap) return;
+				flagsModeEl.value = mode;
+				const useJson = mode === "json";
+				flagsEl.hidden = !useJson;
+				if (flagsPrettyEl) flagsPrettyEl.hidden = !useJson;
+				flagsFieldsWrap.hidden = useJson;
+			}
+
 			function close() {
 				modal.classList.remove("open");
 				document.removeEventListener("keydown", onKey);
@@ -244,6 +339,8 @@ document.addEventListener("DOMContentLoaded", () => {
 				deleteBtn.removeEventListener("click", onDelete);
 				cancelBtns.forEach(btn => btn.removeEventListener("click", onCancel));
 				typeEl.removeEventListener("change", onTypeChange);
+				if (flagsModeEl) flagsModeEl.removeEventListener("change", onFlagsModeChange);
+				if (addFlagRowBtn) addFlagRowBtn.removeEventListener("click", onAddFlagRow);
 				if (flagsPrettyEl) flagsPrettyEl.removeEventListener("click", onPretty);
 			}
 			function onKey(e) { if (e.key === "Escape") close(); }
@@ -251,6 +348,17 @@ document.addEventListener("DOMContentLoaded", () => {
 			function onTypeChange() {
 				decoderWrap.hidden = typeEl.value !== "value";
 				flagsWrap.hidden = typeEl.value !== "flags";
+			}
+			function onFlagsModeChange() {
+				const mode = flagsModeEl.value === "fields" ? "fields" : "json";
+				if (mode === "fields") {
+					const map = parseFlagsMapFromJson(flagsEl.value);
+					buildFieldsFromMap(map, group.bits.length);
+				}
+				setFlagsMode(mode);
+			}
+			function onAddFlagRow() {
+				addFlagRow();
 			}
 			function onPretty() {
 				try {
@@ -264,7 +372,14 @@ document.addEventListener("DOMContentLoaded", () => {
 				group.label = labelEl.value.trim() || group.label;
 				group.type = typeEl.value;
 				if (group.type === "value") group.decoderSource = decoderEl.value;
-				if (group.type === "flags") group.flagsDescriptionSource = flagsEl.value;
+				if (group.type === "flags") {
+					if (flagsModeEl && flagsModeEl.value === "fields") {
+						const map = getMapFromFields();
+						group.flagsDescriptionSource = JSON.stringify(map);
+					} else {
+						group.flagsDescriptionSource = flagsEl.value;
+					}
+				}
 				renderGroups();
 				updateGroupsOutputs();
 				close();
@@ -279,7 +394,22 @@ document.addEventListener("DOMContentLoaded", () => {
 			cancelBtns.forEach(btn => btn.addEventListener("click", onCancel));
 			typeEl.addEventListener("change", onTypeChange);
 			document.addEventListener("keydown", onKey);
+			if (flagsModeEl) flagsModeEl.addEventListener("change", onFlagsModeChange);
+			if (addFlagRowBtn) addFlagRowBtn.addEventListener("click", onAddFlagRow);
 			if (flagsPrettyEl) flagsPrettyEl.addEventListener("click", onPretty);
+
+			// Initialize mode based on whether JSON parses to a non-empty map
+			if (flagsModeEl) {
+				const initialMap = parseFlagsMapFromJson(flagsEl.value);
+				const hasAny = Object.keys(initialMap).length > 0;
+				if (hasAny) {
+					// Default to JSON but let user switch
+					setFlagsMode("json");
+				} else {
+					setFlagsMode("fields");
+					buildFieldsFromMap({}, group.bits.length);
+				}
+			}
 
 			modal.classList.add("open");
 		}
