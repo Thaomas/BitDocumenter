@@ -25,8 +25,12 @@ document.addEventListener("DOMContentLoaded", () => {
 		const groupSelectedBtn = document.getElementById("groupSelectedBtn");
 		const clearSelectedBtn = document.getElementById("clearSelectedBtn");
 		const groupLabelInput = document.getElementById("groupLabelInput");
+		const bitOrderSelect = document.getElementById("bitOrder");
 
 		if (!bytesContainer || !addByteBtn || !removeByteBtn || !groupsContainer || !selectModeCheckbox || !groupSelectedBtn || !clearSelectedBtn || !groupLabelInput) return;
+
+		/** @type {"msb"|"lsb"} */
+		let bitOrder = "msb";
 
 		let groupIdCounter = 0;
 		const groupColors = [
@@ -40,7 +44,7 @@ document.addEventListener("DOMContentLoaded", () => {
 		// id -> { id, label, bits: HTMLElement[], colorIndex, type, decoderSource, flagsDescriptionSource, els }
 		const groups = new Map();
 
-		const defaultDecoder = `function decode(bits) {\n  // bits: array of 0/1, MSB..LSB (left -> right)\n  let value = 0;\n  for (const b of bits) value = (value << 1) | b;\n  return value;\n}`;
+		const defaultDecoder = `function decode(bits) {\n  // bits: array of 0/1 in selected order\n  // MSB-first: bits[0] is most significant; LSB-first: bits[0] is least significant\n  let value = 0;\n  for (const b of bits) value = (value << 1) | b;\n  return value;\n}`;
 		const defaultFlagsDescriptions = '{"0":"Flag 0|No Flag 0","1":{"1":"Flag 1 set","0":"Flag 1 clear"}}';
 
 		function createBit(initialOn) {
@@ -134,7 +138,8 @@ document.addEventListener("DOMContentLoaded", () => {
 		}
 
 		function computeFlagsOutput(group) {
-			const vals = getBitsValues(group.bits);
+			const orderedBits = bitOrder === "msb" ? group.bits : group.bits.slice().reverse();
+			const vals = getBitsValues(orderedBits);
 			const setIdx = vals.map((v, i) => [v, i]).filter(([v]) => v === 1).map(([, i]) => i);
 			let descMap = {};
 			let parseError = "";
@@ -170,13 +175,14 @@ document.addEventListener("DOMContentLoaded", () => {
 					}
 
 					if (chosenLabel) {
-						labeledOutputs.push(`${idx}:${chosenLabel}`);
+						labeledOutputs.push(`${idx}: ${chosenLabel}`);
 					}
 				}
 			}
 
 			if (labeledOutputs.length > 0) {
-				return { text: `Labels: [${labeledOutputs.join(", ")}]`, error: parseError };
+				// Show each chosenLabel on its own line
+				return { text: `Labels:\n${labeledOutputs.join("\n")}`, error: parseError };
 			}
 
 			// Fallback to previous "set bits" behavior
@@ -185,6 +191,7 @@ document.addEventListener("DOMContentLoaded", () => {
 		}
 
 		function computeValueOutput(group) {
+			// Always use MSB->LSB DOM order for decoding; visual order does not affect decode
 			const bits = getBitsValues(group.bits);
 			try {
 				const fn = new Function("bits", `${group.decoderSource}\n; if (typeof decode !== 'function') { throw new Error('Define function decode(bits)'); } return decode(bits);`);
@@ -289,16 +296,12 @@ document.addEventListener("DOMContentLoaded", () => {
 				swatch.style.background = groupColors[colorIndex];
 
 				const text = document.createElement("span");
-				// const positions = bits.map(bit => {
-				// 	const row = bit.parentElement;
-				// 	const byteIndex = Array.from(bytesContainer.children).indexOf(row);
-				// 	const bitIndex = Array.from(row.children).indexOf(bit);
-				// 	return `B${byteIndex}[${bitIndex}]`;
-				// }).join(", ");	
 				text.textContent = `${label}`;
 
 				const output = document.createElement("span");
 				output.className = "group-output";
+				// Ensure newline characters render as line breaks
+				output.style.whiteSpace = "pre-line";
 				const error = document.createElement("span");
 				error.className = "group-error";
 
@@ -325,6 +328,7 @@ document.addEventListener("DOMContentLoaded", () => {
 		function addByte() {
 			const idx = bytesContainer.querySelectorAll(".byte-row").length;
 			const row = createByteRow(idx);
+			if (bitOrder === "lsb") row.classList.add("lsb");
 			bytesContainer.appendChild(row);
 			updateRemoveVisibility();
 		}
@@ -358,6 +362,18 @@ document.addEventListener("DOMContentLoaded", () => {
 		selectModeCheckbox.addEventListener("change", () => {
 			if (selectModeCheckbox.checked) clearSelection();
 		});
+		if (bitOrderSelect) {
+			bitOrderSelect.addEventListener("change", () => {
+				const val = String(bitOrderSelect.value).toLowerCase();
+				bitOrder = (val === "lsb") ? "lsb" : "msb";
+				// Flip visual order only
+				bytesContainer.querySelectorAll(".byte-row").forEach(r => {
+					if (bitOrder === "lsb") r.classList.add("lsb");
+					else r.classList.remove("lsb");
+				});
+				updateGroupsOutputs();
+			});
+		}
 
 		// initialize with one byte
 		addByte();
