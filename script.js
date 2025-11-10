@@ -41,7 +41,7 @@ document.addEventListener("DOMContentLoaded", () => {
 		const groups = new Map();
 
 		const defaultDecoder = `function decode(bits) {\n  // bits: array of 0/1, MSB..LSB (left -> right)\n  let value = 0;\n  for (const b of bits) value = (value << 1) | b;\n  return value;\n}`;
-		const defaultFlagsDescriptions = '{"0":"Flag 0","1":"Flag 1"}';
+		const defaultFlagsDescriptions = '{"0":"Flag 0|No Flag 0","1":{"1":"Flag 1 set","0":"Flag 1 clear"}}';
 
 		function createBit(initialOn) {
 			const el = document.createElement("button");
@@ -49,7 +49,7 @@ document.addEventListener("DOMContentLoaded", () => {
 			el.type = "button";
 			el.textContent = initialOn ? "1" : "0";
 			el.addEventListener("click", () => {
-				if (selectModeCheckbox.checked) {
+				if (!selectModeCheckbox.checked) {
 					el.classList.toggle("selected");
 					updateSelectionControls();
 				} else {
@@ -143,6 +143,43 @@ document.addEventListener("DOMContentLoaded", () => {
 			} catch (e) {
 				parseError = e instanceof Error ? e.message : String(e);
 			}
+
+			// Build outputs supporting per-bit labels for 1 and 0
+			const labeledOutputs = [];
+			if (descMap && typeof descMap === "object") {
+				for (const key of Object.keys(descMap)) {
+					const idx = Number(key);
+					if (!Number.isFinite(idx)) continue;
+					const bitVal = vals[idx] ?? 0;
+					const raw = descMap[key];
+
+					let chosenLabel = "";
+					if (raw && typeof raw === "object") {
+						// { "1": "On label", "0": "Off label" }
+						const map1 = raw;
+						if (bitVal === 1 && typeof map1["1"] === "string") chosenLabel = map1["1"];
+						else if (bitVal === 0 && typeof map1["0"] === "string") chosenLabel = map1["0"];
+					} else if (typeof raw === "string") {
+						// "On|Off" or "On" (only when 1)
+						if (raw.includes("|")) {
+							const [onText, offText = ""] = raw.split("|");
+							chosenLabel = bitVal === 1 ? onText : offText;
+						} else {
+							chosenLabel = bitVal === 1 ? raw : "";
+						}
+					}
+
+					if (chosenLabel) {
+						labeledOutputs.push(`${idx}:${chosenLabel}`);
+					}
+				}
+			}
+
+			if (labeledOutputs.length > 0) {
+				return { text: `Labels: [${labeledOutputs.join(", ")}]`, error: parseError };
+			}
+
+			// Fallback to previous "set bits" behavior
 			const described = setIdx.map(i => (descMap && Object.prototype.hasOwnProperty.call(descMap, String(i))) ? `${i}:${descMap[String(i)]}` : String(i));
 			return { text: setIdx.length ? `Set: [${described.join(", ")}]` : "Set: none", error: parseError };
 		}
@@ -181,6 +218,7 @@ document.addEventListener("DOMContentLoaded", () => {
 			const decoderEl = document.getElementById("gsDecoder");
 			const flagsWrap = document.getElementById("gsFlagsWrap");
 			const flagsEl = document.getElementById("gsFlagsDescriptions");
+			const flagsPrettyEl = document.getElementById("gsFlagsPretty");
 			const saveBtn = document.getElementById("gsSave");
 			const deleteBtn = document.getElementById("gsDelete");
 			const cancelBtns = modal.querySelectorAll("[data-close-modal]");
@@ -199,12 +237,21 @@ document.addEventListener("DOMContentLoaded", () => {
 				deleteBtn.removeEventListener("click", onDelete);
 				cancelBtns.forEach(btn => btn.removeEventListener("click", onCancel));
 				typeEl.removeEventListener("change", onTypeChange);
+				if (flagsPrettyEl) flagsPrettyEl.removeEventListener("click", onPretty);
 			}
 			function onKey(e) { if (e.key === "Escape") close(); }
 			function onCancel() { close(); }
 			function onTypeChange() {
 				decoderWrap.hidden = typeEl.value !== "value";
 				flagsWrap.hidden = typeEl.value !== "flags";
+			}
+			function onPretty() {
+				try {
+					const parsed = JSON.parse(flagsEl.value || "{}");
+					flagsEl.value = JSON.stringify(parsed, null, 2);
+				} catch (e) {
+					alert(e instanceof Error ? e.message : String(e));
+				}
 			}
 			function onSave() {
 				group.label = labelEl.value.trim() || group.label;
@@ -225,6 +272,7 @@ document.addEventListener("DOMContentLoaded", () => {
 			cancelBtns.forEach(btn => btn.addEventListener("click", onCancel));
 			typeEl.addEventListener("change", onTypeChange);
 			document.addEventListener("keydown", onKey);
+			if (flagsPrettyEl) flagsPrettyEl.addEventListener("click", onPretty);
 
 			modal.classList.add("open");
 		}
@@ -308,7 +356,7 @@ document.addEventListener("DOMContentLoaded", () => {
 		groupSelectedBtn.addEventListener("click", addGroupFromSelection);
 		clearSelectedBtn.addEventListener("click", clearSelection);
 		selectModeCheckbox.addEventListener("change", () => {
-			if (!selectModeCheckbox.checked) clearSelection();
+			if (selectModeCheckbox.checked) clearSelection();
 		});
 
 		// initialize with one byte
