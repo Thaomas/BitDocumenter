@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Byte Visualizer • BitDocumenter</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+	<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+	<header class="site-header">
+		<div class="container">
+			<h1 class="logo">BitDocumenter</h1>
+			<nav class="nav">
+				<a href="index.html#features">Features</a>
+				<a href="index.html#getting-started">Getting Started</a>
+				<a href="index.html#about">About</a>
+				<a aria-current="page" href="byte.html">Byte Visualizer</a>
+			</nav>
+		</div>
+	</header>
+
+	<main id="byteApp">
+		<section class="section">
+			<div class="container">
+				<h2>Interactive Byte Visualizer</h2>
+				<p class="muted">Click any bit to toggle between 0 and 1. Add more bytes as needed.</p>
+
+				<div class="controls">
+					<button id="addByteBtn" class="btn-primary">Add Byte</button>
+					<button id="removeByteBtn" class="btn-secondary" hidden>Remove Last Byte</button>
+					<span class="divider"></span>
+					<label class="toggle-select">
+						<input id="selectMode" type="checkbox" />
+						<span>Select mode</span>
+					</label>
+					<input id="groupLabelInput" class="text-input" type="text" placeholder="Group label (e.g., opcode)" aria-label="Group label" />
+					<button id="groupSelectedBtn" class="btn-secondary" disabled>Group Selected</button>
+					<button id="clearSelectedBtn" class="btn-secondary" disabled>Clear Selection</button>
+				</div>
+
+				<div id="bytesContainer" class="bytes-stack"></div>
+
+				<div class="groups-panel">
+					<h4 class="groups-title">Groups</h4>
+					<div id="groupsContainer" class="groups-container"></div>
+				</div>
+
+				<!-- Group Settings Modal -->
+				<div id="groupSettingsModal" class="modal" aria-hidden="true" role="dialog" aria-modal="true">
+					<div class="modal-backdrop" data-close-modal></div>
+					<div class="modal-content" role="document">
+						<h3 class="modal-title">Group Settings</h3>
+						<div class="modal-body">
+							<label class="field">
+								<span>Label</span>
+								<input id="gsLabel" class="text-input" type="text" placeholder="Group label" />
+							</label>
+							<label class="field">
+								<span>Type</span>
+								<select id="gsType" class="group-type">
+									<option value="flags">Flags</option>
+									<option value="value">Value</option>
+								</select>
+							</label>
+							<div id="gsDecoderWrap" class="group-decoder" hidden>
+								<textarea id="gsDecoder" class="decoder-input" spellcheck="false"></textarea>
+								<span class="group-output">Provide function decode(bits) { ... } that returns a value.</span>
+							</div>
+							<div id="gsFlagsWrap" class="group-decoder" hidden>
+								<textarea id="gsFlagsDescriptions" class="decoder-input" spellcheck="false" placeholder='{\"0\":\"Zero Flag\",\"1\":\"Sign Flag\"}'></textarea>
+								<span class="group-output">Provide JSON mapping of bit index to description, e.g. {"1":"Carry","5":"Overflow"}.</span>
+							</div>
+						</div>
+						<div class="modal-actions">
+							<button id="gsCancel" class="btn-secondary" data-close-modal>Cancel</button>
+							<button id="gsDelete" class="btn-secondary">Delete Group</button>
+							<button id="gsSave" class="btn-primary">Save</button>
+						</div>
+					</div>
+				</div>
+			</div>
+		</section>
+	</main>
+
+	<footer class="site-footer">
+		<div class="container">
+			<p>&copy; <span id="year"></span> BitDocumenter</p>
+		</div>
+	</footer>
+
+	<script src="script.js"></script>
+	<noscript>This page requires JavaScript for interactivity.</noscript>
+</body>
+</html>
+
