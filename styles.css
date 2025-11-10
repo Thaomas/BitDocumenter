@@ -141,6 +141,12 @@ main { flex: 1; }
 .muted { color: var(--muted); }
 
 /* Byte Visualizer */
+.modifyContainer {
+	display: flex;
+	gap: 12px;
+	align-items: center;
+	margin: 16px 0 20px;
+}
 .controls {
 	display: flex;
 	gap: 12px;
