@@ -26,6 +26,7 @@ document.addEventListener("DOMContentLoaded", () => {
 		const clearSelectedBtn = document.getElementById("clearSelectedBtn");
 		const groupLabelInput = document.getElementById("groupLabelInput");
 		const bitOrderSelect = document.getElementById("bitOrder");
+		const bytesHexInput = document.getElementById("bytesHexInput");
 
 		if (!bytesContainer || !addByteBtn || !removeByteBtn || !groupsContainer || !selectModeCheckbox || !groupSelectedBtn || !clearSelectedBtn || !groupLabelInput) return;
 
@@ -60,6 +61,7 @@ document.addEventListener("DOMContentLoaded", () => {
 					const isOn = el.classList.toggle("on");
 					el.textContent = isOn ? "1" : "0";
 					updateGroupsOutputs();
+					updateHexInputFromGrid();
 				}
 			});
 			return el;
@@ -77,6 +79,12 @@ document.addEventListener("DOMContentLoaded", () => {
 		function updateRemoveVisibility() {
 			const count = bytesContainer.querySelectorAll(".byte-row").length;
 			removeByteBtn.hidden = count <= 1;
+			if (!removeByteBtn.hidden) {
+				const rows = bytesContainer.querySelectorAll(".byte-row");
+				const last = rows[rows.length - 1];
+				const hasGroupsInLast = last ? Array.from(last.querySelectorAll(".bit")).some(b => !!b.dataset.groupIds) : false;
+				removeByteBtn.disabled = hasGroupsInLast;
+			}
 		}
 
 		function updateSelectionControls() {
@@ -453,6 +461,7 @@ document.addEventListener("DOMContentLoaded", () => {
 				group.els = { chipEl: chip, outputEl: output, errorEl: error };
 			}
 			updateGroupsOutputs();
+			updateRemoveVisibility();
 		}
 
 		function addByte() {
@@ -461,12 +470,19 @@ document.addEventListener("DOMContentLoaded", () => {
 			if (bitOrder === "lsb") row.classList.add("lsb");
 			bytesContainer.appendChild(row);
 			updateRemoveVisibility();
+			updateHexInputFromGrid();
 		}
 
 		function removeLastByte() {
 			const rows = bytesContainer.querySelectorAll(".byte-row");
 			if (rows.length > 1) {
 				const last = rows[rows.length - 1];
+				// Prevent deletion if any bit in last byte belongs to a group
+				const hasGroupsInLast = Array.from(last.querySelectorAll(".bit")).some(b => !!b.dataset.groupIds);
+				if (hasGroupsInLast) {
+					updateRemoveVisibility();
+					return;
+				}
 				const bitsInLast = Array.from(last.querySelectorAll(".bit"));
 				for (const [gid, g] of Array.from(groups.entries())) {
 					const remainingBits = g.bits.filter(b => !bitsInLast.includes(b));
@@ -482,6 +498,7 @@ document.addEventListener("DOMContentLoaded", () => {
 				updateRemoveVisibility();
 				updateSelectionControls();
 				updateGroupsOutputs();
+				updateHexInputFromGrid();
 			}
 		}
 
@@ -489,6 +506,104 @@ document.addEventListener("DOMContentLoaded", () => {
 		removeByteBtn.addEventListener("click", removeLastByte);
 		groupSelectedBtn.addEventListener("click", addGroupFromSelection);
 		clearSelectedBtn.addEventListener("click", clearSelection);
+
+		function updateHexInputFromGrid() {
+			if (!bytesHexInput) return;
+			const rows = bytesContainer.querySelectorAll(".byte-row");
+			/** @type {number[]} */
+			const bytes = [];
+			rows.forEach((row) => {
+				const bits = row.querySelectorAll(".bit");
+				let value = 0;
+				for (let i = 0; i < 8; i++) {
+					const isOn = bits[i]?.classList.contains("on");
+					value = (value << 1) | (isOn ? 1 : 0);
+				}
+				bytes.push(value);
+			});
+			let hex = bytes.map(b => b.toString(16).padStart(2, "0")).join("").toUpperCase();
+			hex = hex.replace(/^0+/, "") || "0";
+			bytesHexInput.value = "0x" + hex;
+		}
+
+		function setBitsForByte(rowEl, byteValue) {
+			const bits = rowEl.querySelectorAll(".bit");
+			for (let i = 0; i < 8; i++) {
+				const bitVal = (byteValue >> (7 - i)) & 1;
+				const el = bits[i];
+				if (!el) continue;
+				if (bitVal === 1) {
+					el.classList.add("on");
+					el.textContent = "1";
+				} else {
+					el.classList.remove("on");
+					el.textContent = "0";
+				}
+			}
+		}
+
+		function applyHexBytesInput() {
+			if (!bytesHexInput) return;
+			let raw = bytesHexInput.value.trim();
+			if (raw === "") return;
+			// Allow prefix 0x/0X and spaces/underscores
+			raw = raw.replace(/^0x/i, "").replace(/[\s_]/g, "");
+			if (raw !== "" && !/^[0-9a-fA-F]+$/.test(raw)) {
+				// Ignore invalid partial input without disturbing typing
+				return;
+			}
+			// Pad to even number of digits
+			if (raw.length % 2 === 1) raw = "0" + raw;
+			/** @type {number[]} big-endian byte array */
+			const bytes = [];
+			if (raw.length > 0) {
+				for (let i = 0; i < raw.length; i += 2) {
+					bytes.push(parseInt(raw.slice(i, i + 2), 16));
+				}
+			} else {
+				bytes.push(0);
+			}
+
+			// Ensure we have the right number of rows (big-endian: first byte -> first row)
+			const current = bytesContainer.querySelectorAll(".byte-row").length;
+			if (current < bytes.length) {
+				for (let i = current; i < bytes.length; i++) addByte();
+			} else if (current > bytes.length) {
+				for (let i = current; i > bytes.length; i--) removeLastByte();
+			}
+
+			const rows = bytesContainer.querySelectorAll(".byte-row");
+			for (let i = 0; i < bytes.length; i++) {
+				setBitsForByte(rows[i], bytes[i]);
+			}
+			updateGroupsOutputs();
+
+			// Normalize input display to canonical uppercase 0x form
+			let hex = bytes.map(b => b.toString(16).padStart(2, "0")).join("").toUpperCase();
+			hex = hex.replace(/^0+/, "") || "0";
+			bytesHexInput.value = "0x" + hex;
+		}
+
+		if (bytesHexInput) {
+			function sanitizeHexField() {
+				if (!bytesHexInput) return;
+				let s = bytesHexInput.value || "";
+				s = s.trim();
+				// Normalize prefix
+				let prefix = "";
+				if (/^0[xX]/.test(s)) {
+					prefix = "0x";
+					s = s.slice(2);
+				}
+				// Keep only hex digits
+				s = s.replace(/[^0-9a-fA-F]/g, "");
+				bytesHexInput.value = (prefix ? "0x" : "") + s.toUpperCase();
+			}
+			bytesHexInput.addEventListener("input", () => {
+				sanitizeHexField();
+				applyHexBytesInput();
+			});
+		}
 		selectModeCheckbox.addEventListener("change", () => {
 			if (selectModeCheckbox.checked) clearSelection();
 		});
@@ -507,6 +622,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 		// initialize with one byte
 		addByte();
+		updateHexInputFromGrid();
 	}
 });
 
