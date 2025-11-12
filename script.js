@@ -27,11 +27,21 @@ document.addEventListener("DOMContentLoaded", () => {
 		const groupLabelInput = document.getElementById("groupLabelInput");
 		const bitOrderSelect = document.getElementById("bitOrder");
 		const bytesHexInput = document.getElementById("bytesHexInput");
+		const exportConfigBtn = document.getElementById("exportConfigBtn");
+		const copyConfigBtn = document.getElementById("copyConfigBtn");
+		const importConfigBtn = document.getElementById("importConfigBtn");
+		const configBase64Textarea = document.getElementById("configBase64");
+		const importExportStatus = document.getElementById("importExportStatus");
+		const exportIncludeSetBitsCheckbox = document.getElementById("exportIncludeSetBits");
+		const importExportToggle = document.getElementById("importExportToggle");
+		const importExportMenu = document.getElementById("importExportMenu");
+		const closeImportExportBtn = document.getElementById("closeImportExportBtn");
 
 		if (!bytesContainer || !addByteBtn || !removeByteBtn || !groupsContainer || !selectModeCheckbox || !groupSelectedBtn || !clearSelectedBtn || !groupLabelInput) return;
 
 		/** @type {"msb"|"lsb"} */
 		let bitOrder = "msb";
+		let importExportMenuOpen = false;
 
 		let groupIdCounter = 0;
 		const groupColors = [
@@ -48,11 +58,13 @@ document.addEventListener("DOMContentLoaded", () => {
 		const defaultDecoder = `function decode(bits) {\n  // bits: array of 0/1 in selected order\n  // MSB-first: bits[0] is most significant; LSB-first: bits[0] is least significant\n  let value = 0;\n  for (const b of bits) value = (value << 1) | b;\n  return value;\n}`;
 		const defaultFlagsDescriptions = '{"0":"Flag 0|No Flag 0","1":{"1":"Flag 1 set","0":"Flag 1 clear"}}';
 
-		function createBit(initialOn) {
+		function createBit(initialOn, byteIndex, bitIndex) {
 			const el = document.createElement("button");
 			el.className = "bit" + (initialOn ? " on" : "");
 			el.type = "button";
 			el.textContent = initialOn ? "1" : "0";
+			el.dataset.byteIndex = String(byteIndex);
+			el.dataset.bitIndex = String(bitIndex);
 			el.addEventListener("click", () => {
 				if (!selectModeCheckbox.checked) {
 					el.classList.toggle("selected");
@@ -71,9 +83,101 @@ document.addEventListener("DOMContentLoaded", () => {
 			const row = document.createElement("div");
 			row.className = "byte-row";
 			for (let i = 0; i < 8; i++) {
-				row.appendChild(createBit(false));
+				row.appendChild(createBit(false, byteIndex, i));
 			}
 			return row;
+		}
+
+		function updateBitDatasets() {
+			const rows = bytesContainer.querySelectorAll(".byte-row");
+			rows.forEach((row, byteIdx) => {
+				const bits = row.querySelectorAll(".bit");
+				bits.forEach((bit, bitIdx) => {
+					bit.dataset.byteIndex = String(byteIdx);
+					bit.dataset.bitIndex = String(bitIdx);
+				});
+			});
+		}
+
+		function applyBitOrder(order) {
+			const normalized = order === "lsb" ? "lsb" : "msb";
+			bitOrder = normalized;
+			if (bitOrderSelect) {
+				bitOrderSelect.value = normalized;
+			}
+			bytesContainer.querySelectorAll(".byte-row").forEach((row) => {
+				if (normalized === "lsb") row.classList.add("lsb");
+				else row.classList.remove("lsb");
+			});
+			updateGroupsOutputs();
+		}
+
+		function getBitCoordinates(bitEl) {
+			const byteIndex = Number(bitEl.dataset.byteIndex);
+			const bitIndex = Number(bitEl.dataset.bitIndex);
+			if (Number.isFinite(byteIndex) && Number.isFinite(bitIndex)) {
+				return { byteIndex, bitIndex };
+			}
+			const parent = bitEl.parentElement;
+			const rows = Array.from(bytesContainer.querySelectorAll(".byte-row"));
+			const rowIndex = rows.indexOf(parent);
+			const bits = parent ? Array.from(parent.querySelectorAll(".bit")) : [];
+			const idx = bits.indexOf(bitEl);
+			return { byteIndex: rowIndex, bitIndex: idx };
+		}
+
+		function getBitElement(byteIndex, bitIndex) {
+			const rows = bytesContainer.querySelectorAll(".byte-row");
+			const row = rows[byteIndex];
+			if (!row) return null;
+			const bits = row.querySelectorAll(".bit");
+			return bits[bitIndex] || null;
+		}
+
+		function attachBitsToGroup(id, colorIndex, bits) {
+			bits.forEach((bit) => {
+				bit.classList.remove("selected");
+				const cls = `group-${colorIndex}`;
+				bit.classList.add(cls);
+				if (bit.dataset.groupIds) {
+					const existing = bit.dataset.groupIds.split(",").filter(Boolean);
+					if (!existing.includes(id)) {
+						existing.push(id);
+						bit.dataset.groupIds = existing.join(",");
+					}
+				} else {
+					bit.dataset.groupIds = id;
+				}
+			});
+		}
+
+		function detachBitsFromGroup(id, colorIndex, bits) {
+			bits.forEach((bit) => {
+				const cls = `group-${colorIndex}`;
+				const ids = (bit.dataset.groupIds || "").split(",").filter(Boolean);
+				const remaining = ids.filter(gid => gid !== id);
+				if (remaining.length) {
+					bit.dataset.groupIds = remaining.join(",");
+				} else {
+					delete bit.dataset.groupIds;
+				}
+				if (!remaining.some(gid => {
+					const group = groups.get(gid);
+					return group && group.colorIndex === colorIndex;
+				})) {
+					bit.classList.remove(cls);
+				}
+			});
+		}
+
+		function updateGroupIdCounterFromId(id) {
+			const match = /^g(\d+)$/.exec(id);
+			if (match) {
+				const num = Number(match[1]);
+				if (Number.isFinite(num) && num >= groupIdCounter) {
+					groupIdCounter = num + 1;
+				}
+			}
 		}
 
 		function updateRemoveVisibility() {
@@ -104,13 +208,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
 			const label = groupLabelInput.value.trim() || `Group ${groupIdCounter + 1}`;
 			const id = `g${groupIdCounter++}`;
-			const colorIndex = (groupIdCounter - 1) % 6;
+			const colorIndex = groupColors.length ? (groupIdCounter - 1) % groupColors.length : 0;
 
-			selectedBits.forEach((bit) => {
-				bit.classList.remove("selected");
-				bit.classList.add(`group-${colorIndex}`);
-				bit.dataset.groupIds = bit.dataset.groupIds ? `${bit.dataset.groupIds},${id}` : id;
-			});
+			attachBitsToGroup(id, colorIndex, selectedBits);
 
 			groups.set(id, { id, label, bits: selectedBits, colorIndex, type: "flags", decoderSource: defaultDecoder, flagsDescriptionSource: defaultFlagsDescriptions, els: {} });
 			renderGroups();
@@ -121,21 +221,7 @@ document.addEventListener("DOMContentLoaded", () => {
 		function removeGroup(id) {
 			const group = groups.get(id);
 			if (!group) return;
-			group.bits.forEach((bit) => {
-				const cls = `group-${group.colorIndex}`;
-				const otherWithSameColor = (bit.dataset.groupIds || "")
-					.split(",")
-					.filter(gid => gid && gid !== id)
-					.some(gid => {
-						const g = groups.get(gid);
-						return g && g.colorIndex === group.colorIndex;
-					});
-				if (!otherWithSameColor) bit.classList.remove(cls);
-
-				const ids = (bit.dataset.groupIds || "").split(",").filter(gid => gid && gid !== id);
-				if (ids.length) bit.dataset.groupIds = ids.join(",");
-				else delete bit.dataset.groupIds;
-			});
+			detachBitsFromGroup(id, group.colorIndex, group.bits);
 			groups.delete(id);
 			renderGroups();
 			updateGroupsOutputs();
@@ -469,36 +555,245 @@ document.addEventListener("DOMContentLoaded", () => {
 			const row = createByteRow(idx);
 			if (bitOrder === "lsb") row.classList.add("lsb");
 			bytesContainer.appendChild(row);
+			updateBitDatasets();
 			updateRemoveVisibility();
 			updateHexInputFromGrid();
 		}
 
 		function removeLastByte() {
 			const rows = bytesContainer.querySelectorAll(".byte-row");
-			if (rows.length > 1) {
-				const last = rows[rows.length - 1];
-				// Prevent deletion if any bit in last byte belongs to a group
-				const hasGroupsInLast = Array.from(last.querySelectorAll(".bit")).some(b => !!b.dataset.groupIds);
-				if (hasGroupsInLast) {
-					updateRemoveVisibility();
-					return;
+			if (rows.length <= 1) return false;
+
+			const last = rows[rows.length - 1];
+			// Prevent deletion if any bit in last byte belongs to a group
+			const hasGroupsInLast = Array.from(last.querySelectorAll(".bit")).some(b => !!b.dataset.groupIds);
+			if (hasGroupsInLast) {
+				updateRemoveVisibility();
+				return false;
+			}
+			const bitsInLast = Array.from(last.querySelectorAll(".bit"));
+			for (const [gid, g] of Array.from(groups.entries())) {
+				const remainingBits = g.bits.filter(b => !bitsInLast.includes(b));
+				if (remainingBits.length === 0) {
+					groups.delete(gid);
+				} else if (remainingBits.length !== g.bits.length) {
+					g.bits = remainingBits;
 				}
-				const bitsInLast = Array.from(last.querySelectorAll(".bit"));
-				for (const [gid, g] of Array.from(groups.entries())) {
-					const remainingBits = g.bits.filter(b => !bitsInLast.includes(b));
-					if (remainingBits.length === 0) {
-						groups.delete(gid);
-					} else if (remainingBits.length !== g.bits.length) {
-						g.bits = remainingBits;
-					}
+			}
+			renderGroups();
+
+			last.remove();
+			updateBitDatasets();
+			updateRemoveVisibility();
+			updateSelectionControls();
+			updateGroupsOutputs();
+			updateHexInputFromGrid();
+			return true;
+		}
+
+		function clearAllGroups() {
+			for (const [id, group] of Array.from(groups.entries())) {
+				detachBitsFromGroup(id, group.colorIndex, group.bits);
+			}
+			groups.clear();
+			renderGroups();
+		}
+
+		function normalizeBytesArray(bytesArray) {
+			if (!Array.isArray(bytesArray) || bytesArray.length === 0) {
+				return [0];
+			}
+			return bytesArray.map((byte) => {
+				const num = Number(byte);
+				if (!Number.isFinite(num)) return 0;
+				return ((num % 256) + 256) % 256;
+			});
+		}
+
+		function setBytesFromArray(bytesArray) {
+			const normalized = normalizeBytesArray(bytesArray);
+			while (bytesContainer.querySelectorAll(".byte-row").length < normalized.length) {
+				addByte();
+			}
+			while (bytesContainer.querySelectorAll(".byte-row").length > normalized.length) {
+				const removed = removeLastByte();
+				if (!removed) break;
+			}
+			const rows = bytesContainer.querySelectorAll(".byte-row");
+			normalized.forEach((byte, idx) => {
+				const row = rows[idx];
+				if (row) setBitsForByte(row, byte);
+			});
+			updateBitDatasets();
+			updateGroupsOutputs();
+			updateHexInputFromGrid();
+		}
+
+		function buildExportPayload(includeSetBits) {
+			updateBitDatasets();
+			const bytes = getBytesArrayFromGrid();
+			const groupsData = Array.from(groups.values()).map((group) => {
+				const bits = group.bits.map((bit) => {
+					const { byteIndex, bitIndex } = getBitCoordinates(bit);
+					return { byteIndex, bitIndex };
+				});
+				return {
+					id: group.id,
+					label: group.label,
+					type: group.type,
+					decoderSource: group.decoderSource,
+					flagsDescriptionSource: group.flagsDescriptionSource,
+					colorIndex: group.colorIndex,
+					bits,
+				};
+			});
+			const payload = {
+				version: 1,
+				exportedAt: new Date().toISOString(),
+				bitOrder,
+				bytes,
+				groups: groupsData,
+			};
+			if (includeSetBits) {
+				payload.setBits = collectSetBits();
+			}
+			payload.hex = bytes.length ? "0x" + bytes.map(b => b.toString(16).padStart(2, "0")).join("").toUpperCase() : "0x0";
+			return payload;
+		}
+
+		function generateExportFilename() {
+			const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+			return `bitdocumenter-${timestamp}.txt`;
+		}
+
+		function addGroupFromSerialized(groupData) {
+			if (!groupData || typeof groupData !== "object") return;
+			const bitCoords = Array.isArray(groupData.bits) ? groupData.bits : [];
+			const bitElements = [];
+			bitCoords.forEach((coord) => {
+				if (!coord || typeof coord !== "object") return;
+				const byteIndex = Number(coord.byteIndex);
+				const bitIndex = Number(coord.bitIndex);
+				if (!Number.isFinite(byteIndex) || !Number.isFinite(bitIndex)) return;
+				const bitEl = getBitElement(byteIndex, bitIndex);
+				if (bitEl && !bitElements.includes(bitEl)) {
+					bitElements.push(bitEl);
+				}
+			});
+			if (bitElements.length === 0) return;
+
+			let desiredId = typeof groupData.id === "string" && groupData.id.trim() ? groupData.id.trim() : "";
+			let id = desiredId && !groups.has(desiredId) ? desiredId : "";
+			if (!id) {
+				id = `g${groupIdCounter++}`;
+			} else {
+				updateGroupIdCounterFromId(id);
+			}
+			while (groups.has(id)) {
+				id = `g${groupIdCounter++}`;
+			}
+
+			const label = typeof groupData.label === "string" && groupData.label.trim() ? groupData.label.trim() : id;
+			const type = groupData.type === "value" ? "value" : "flags";
+			const decoderSource = typeof groupData.decoderSource === "string" && groupData.decoderSource.trim()
+				? groupData.decoderSource
+				: defaultDecoder;
+			const flagsDescriptionSource = typeof groupData.flagsDescriptionSource === "string" && groupData.flagsDescriptionSource.trim()
+				? groupData.flagsDescriptionSource
+				: defaultFlagsDescriptions;
+			const rawColor = Number(groupData.colorIndex);
+			const colorIndex = Number.isFinite(rawColor) && groupColors.length
+				? ((rawColor % groupColors.length) + groupColors.length) % groupColors.length
+				: (groupColors.length ? (groups.size % groupColors.length) : 0);
+
+			attachBitsToGroup(id, colorIndex, bitElements);
+
+			groups.set(id, {
+				id,
+				label,
+				type,
+				decoderSource,
+				flagsDescriptionSource,
+				colorIndex,
+				bits: bitElements,
+				els: {},
+			});
+			updateGroupIdCounterFromId(id);
+		}
+
+		function importConfigurationFromBase64(base64Text) {
+			try {
+				const normalized = (base64Text || "").replace(/\s+/g, "");
+				if (!normalized) {
+					throw new Error("Provide a Base64 configuration before importing.");
+				}
+				const decoded = decodeFromBase64Utf8(normalized);
+				const payload = JSON.parse(decoded);
+				if (!payload || typeof payload !== "object") {
+					throw new Error("Configuration payload is malformed.");
+				}
+
+				const bytes = Array.isArray(payload.bytes) ? payload.bytes : undefined;
+				clearAllGroups();
+				setBytesFromArray(bytes);
+
+				const order = payload.bitOrder === "lsb" ? "lsb" : "msb";
+				applyBitOrder(order);
+
+				if (Array.isArray(payload.groups)) {
+					payload.groups.forEach(addGroupFromSerialized);
 				}
 				renderGroups();
-
-				last.remove();
-				updateRemoveVisibility();
-				updateSelectionControls();
 				updateGroupsOutputs();
-				updateHexInputFromGrid();
+				updateSelectionControls();
+				updateRemoveVisibility();
+				showImportExportStatus("Import successful.", false);
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				showImportExportStatus(`Import failed: ${message}`, true);
+			}
+		}
+
+		function exportConfiguration() {
+			if (!configBase64Textarea) return;
+			try {
+				const includeSetBits = exportIncludeSetBitsCheckbox ? !!exportIncludeSetBitsCheckbox.checked : false;
+				const payload = buildExportPayload(includeSetBits);
+				const json = JSON.stringify(payload, null, 2);
+				const base64 = encodeToBase64Utf8(json);
+				configBase64Textarea.value = base64;
+				const filename = generateExportFilename();
+				downloadTextFile(filename, base64);
+				showImportExportStatus(`Exported configuration to ${filename}.`, false);
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				showImportExportStatus(`Export failed: ${message}`, true);
+			}
+		}
+
+		async function copyConfigurationToClipboard() {
+			if (!configBase64Textarea) return;
+			const text = (configBase64Textarea.value || "").trim();
+			if (!text) {
+				showImportExportStatus("Nothing to copy. Export or import a configuration first.", true);
+				return;
+			}
+			try {
+				if (navigator.clipboard && navigator.clipboard.writeText) {
+					await navigator.clipboard.writeText(text);
+				} else {
+					configBase64Textarea.focus();
+					configBase64Textarea.select();
+					const successful = document.execCommand("copy");
+					window.getSelection()?.removeAllRanges();
+					if (!successful) {
+						throw new Error("Copy command failed.");
+					}
+				}
+				showImportExportStatus("Configuration copied to clipboard.", false);
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				showImportExportStatus(`Copy failed: ${message}`, true);
 			}
 		}
 
@@ -507,8 +802,7 @@ document.addEventListener("DOMContentLoaded", () => {
 		groupSelectedBtn.addEventListener("click", addGroupFromSelection);
 		clearSelectedBtn.addEventListener("click", clearSelection);
 
-		function updateHexInputFromGrid() {
-			if (!bytesHexInput) return;
+		function getBytesArrayFromGrid() {
 			const rows = bytesContainer.querySelectorAll(".byte-row");
 			/** @type {number[]} */
 			const bytes = [];
@@ -521,6 +815,12 @@ document.addEventListener("DOMContentLoaded", () => {
 				}
 				bytes.push(value);
 			});
+			return bytes;
+		}
+
+		function updateHexInputFromGrid() {
+			if (!bytesHexInput) return;
+			const bytes = getBytesArrayFromGrid();
 			let hex = bytes.map(b => b.toString(16).padStart(2, "0")).join("").toUpperCase();
 			hex = hex.replace(/^0+/, "") || "0";
 			bytesHexInput.value = "0x" + hex;
@@ -532,6 +832,7 @@ document.addEventListener("DOMContentLoaded", () => {
 				const bitVal = (byteValue >> (7 - i)) & 1;
 				const el = bits[i];
 				if (!el) continue;
+				el.classList.remove("selected");
 				if (bitVal === 1) {
 					el.classList.add("on");
 					el.textContent = "1";
@@ -540,6 +841,112 @@ document.addEventListener("DOMContentLoaded", () => {
 					el.textContent = "0";
 				}
 			}
+		}
+
+		function collectSetBits() {
+			const rows = bytesContainer.querySelectorAll(".byte-row");
+			/** @type {{byteIndex:number, bitIndex:number}[]} */
+			const setBits = [];
+			rows.forEach((row, byteIndex) => {
+				const bits = row.querySelectorAll(".bit");
+				bits.forEach((bit, bitIndex) => {
+					if (bit.classList.contains("on")) {
+						setBits.push({ byteIndex, bitIndex });
+					}
+				});
+			});
+			return setBits;
+		}
+
+		function encodeToBase64Utf8(str) {
+			const encoder = new TextEncoder();
+			const data = encoder.encode(str);
+			let binary = "";
+			data.forEach((byte) => {
+				binary += String.fromCharCode(byte);
+			});
+			return btoa(binary);
+		}
+
+		function decodeFromBase64Utf8(base64) {
+			const binary = atob(base64);
+			const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+			const decoder = new TextDecoder();
+			return decoder.decode(bytes);
+		}
+
+		function downloadTextFile(filename, content) {
+			const blob = new Blob([content], { type: "text/plain" });
+			const url = URL.createObjectURL(blob);
+			const anchor = document.createElement("a");
+			anchor.href = url;
+			anchor.download = filename;
+			document.body.appendChild(anchor);
+			anchor.click();
+			document.body.removeChild(anchor);
+			URL.revokeObjectURL(url);
+		}
+
+		function showImportExportStatus(message, isError = false) {
+			if (!importExportStatus) return;
+			importExportStatus.textContent = message;
+			if (!message) {
+				delete importExportStatus.dataset.state;
+			} else {
+				importExportStatus.dataset.state = isError ? "error" : "success";
+			}
+		}
+
+		function handleImportExportDocumentPointerDown(event) {
+			if (!importExportMenu || !importExportToggle) return;
+			const target = event.target;
+			if (!(target instanceof Node)) return;
+			if (importExportMenu.contains(target) || importExportToggle.contains(target)) return;
+			closeImportExportMenu();
+		}
+
+		function handleImportExportDocumentKeyDown(event) {
+			if (event.key !== "Escape") return;
+			if (!importExportMenuOpen) return;
+			event.preventDefault();
+			closeImportExportMenu();
+			if (importExportToggle) importExportToggle.focus();
+		}
+
+		function openImportExportMenu() {
+			if (!importExportMenu || !importExportToggle) return;
+			if (importExportMenuOpen) return;
+			importExportMenu.hidden = false;
+			requestAnimationFrame(() => importExportMenu.classList.add("open"));
+			importExportToggle.setAttribute("aria-expanded", "true");
+			importExportMenuOpen = true;
+			showImportExportStatus("");
+			if (configBase64Textarea) configBase64Textarea.focus();
+			document.addEventListener("pointerdown", handleImportExportDocumentPointerDown);
+			document.addEventListener("keydown", handleImportExportDocumentKeyDown);
+		}
+
+		function closeImportExportMenu() {
+			if (!importExportMenu || !importExportToggle) return;
+			if (!importExportMenuOpen) return;
+			importExportMenu.classList.remove("open");
+			importExportToggle.setAttribute("aria-expanded", "false");
+			importExportMenuOpen = false;
+			const onTransitionEnd = () => {
+				importExportMenu.hidden = true;
+			};
+			importExportMenu.addEventListener("transitionend", onTransitionEnd, { once: true });
+			// Fallback in case transitionend does not fire
+			setTimeout(() => {
+				if (!importExportMenuOpen) importExportMenu.hidden = true;
+			}, 180);
+			document.removeEventListener("pointerdown", handleImportExportDocumentPointerDown);
+			document.removeEventListener("keydown", handleImportExportDocumentKeyDown);
+		}
+
+		function toggleImportExportMenu() {
+			if (importExportMenuOpen) closeImportExportMenu();
+			else openImportExportMenu();
 		}
 
 		function applyHexBytesInput() {
@@ -564,19 +971,7 @@ document.addEventListener("DOMContentLoaded", () => {
 				bytes.push(0);
 			}
 
-			// Ensure we have the right number of rows (big-endian: first byte -> first row)
-			const current = bytesContainer.querySelectorAll(".byte-row").length;
-			if (current < bytes.length) {
-				for (let i = current; i < bytes.length; i++) addByte();
-			} else if (current > bytes.length) {
-				for (let i = current; i > bytes.length; i--) removeLastByte();
-			}
-
-			const rows = bytesContainer.querySelectorAll(".byte-row");
-			for (let i = 0; i < bytes.length; i++) {
-				setBitsForByte(rows[i], bytes[i]);
-			}
-			updateGroupsOutputs();
+			setBytesFromArray(bytes);
 
 			// Normalize input display to canonical uppercase 0x form
 			let hex = bytes.map(b => b.toString(16).padStart(2, "0")).join("").toUpperCase();
@@ -604,19 +999,31 @@ document.addEventListener("DOMContentLoaded", () => {
 				applyHexBytesInput();
 			});
 		}
+		if (exportConfigBtn) {
+			exportConfigBtn.addEventListener("click", exportConfiguration);
+		}
+		if (copyConfigBtn) {
+			copyConfigBtn.addEventListener("click", copyConfigurationToClipboard);
+		}
+		if (importConfigBtn) {
+			importConfigBtn.addEventListener("click", () => {
+				if (!configBase64Textarea) return;
+				importConfigurationFromBase64(configBase64Textarea.value);
+			});
+		}
+		if (importExportToggle) {
+			importExportToggle.addEventListener("click", toggleImportExportMenu);
+		}
+		if (closeImportExportBtn) {
+			closeImportExportBtn.addEventListener("click", closeImportExportMenu);
+		}
 		selectModeCheckbox.addEventListener("change", () => {
 			if (selectModeCheckbox.checked) clearSelection();
 		});
 		if (bitOrderSelect) {
 			bitOrderSelect.addEventListener("change", () => {
 				const val = String(bitOrderSelect.value).toLowerCase();
-				bitOrder = (val === "lsb") ? "lsb" : "msb";
-				// Flip visual order only
-				bytesContainer.querySelectorAll(".byte-row").forEach(r => {
-					if (bitOrder === "lsb") r.classList.add("lsb");
-					else r.classList.remove("lsb");
-				});
-				updateGroupsOutputs();
+				applyBitOrder(val === "lsb" ? "lsb" : "msb");
 			});
 		}
 

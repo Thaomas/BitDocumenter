@@ -45,6 +45,30 @@
 					<input id="groupLabelInput" class="text-input" type="text" placeholder="Group label (e.g., opcode)" aria-label="Group label" />
 					<button id="groupSelectedBtn" class="btn-secondary" disabled>Group Selected</button>
 					<button id="clearSelectedBtn" class="btn-secondary" disabled>Clear Selection</button>
+					<div class="import-export-root">
+						<button id="importExportToggle" class="btn-secondary import-export-toggle" type="button" aria-haspopup="true" aria-expanded="false">
+							Import / Export
+						</button>
+						<div id="importExportMenu" class="import-export-menu" role="dialog" aria-modal="false" hidden>
+							<div class="import-export-panel">
+								<div class="import-export-panel-head">
+									<h4>Import / Export</h4>
+									<button id="closeImportExportBtn" class="btn-icon" type="button" aria-label="Close import/export menu">&times;</button>
+								</div>
+								<textarea id="configBase64" class="decoder-input" spellcheck="false" placeholder="Base64 configuration"></textarea>
+								<div class="import-export-actions">
+									<label class="toggle-select">
+										<input id="exportIncludeSetBits" type="checkbox" />
+										<span>Include set bits on export</span>
+									</label>
+									<button id="exportConfigBtn" class="btn-secondary" type="button">Export</button>
+									<button id="copyConfigBtn" class="btn-secondary" type="button">Copy</button>
+									<button id="importConfigBtn" class="btn-secondary" type="button">Import</button>
+								</div>
+								<span id="importExportStatus" class="group-error" role="status" aria-live="polite"></span>
+							</div>
+						</div>
+					</div>
 				</div>
 
 				<div id="bytesContainer" class="bytes-stack"></div>
@@ -56,6 +80,8 @@
 					<h4 class="groups-title">Groups</h4>
 					<div id="groupsContainer" class="groups-container"></div>
 				</div>
+
+				
 
 				<!-- Group Settings Modal -->
 				<div id="groupSettingsModal" class="modal" aria-hidden="true" role="dialog" aria-modal="true">
