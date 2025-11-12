@@ -34,7 +34,7 @@ main { flex: 1; }
 /* Layout helpers */
 .container {
 	width: 100%;
-	max-width: 75%;
+	max-width: 1100px;
 	margin: 0 auto;
 	padding: 0 20px;
 }
