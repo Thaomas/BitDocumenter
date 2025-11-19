@@ -206,8 +206,12 @@ main { flex: 1; }
 .toggle-select input { accent-color: var(--primary); }
 
 .bytes-stack {
-	display: grid;
+	display: flex;
+	flex-direction: column;
 	gap: 14px;
+}
+.bytes-stack.lsbyte {
+	flex-direction: column-reverse;
 }
 .byte-row {
 	display: grid;

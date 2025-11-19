@@ -39,6 +39,7 @@ document.addEventListener("DOMContentLoaded", () => {
 		const optionsToggle = document.getElementById("optionsToggle");
 		const optionsMenu = document.getElementById("optionsMenu");
 		const closeOptionsBtn = document.getElementById("closeOptionsBtn");
+		const byteOrderSelect = document.getElementById("byteOrder");
 
 		if (!bytesContainer || !addByteBtn || !removeByteBtn || !groupsContainer || !selectModeCheckbox || !groupSelectedBtn || !clearSelectedBtn || !groupLabelInput) return;
 
@@ -46,6 +47,8 @@ document.addEventListener("DOMContentLoaded", () => {
 		let bitOrder = "msb";
 		let importExportMenuOpen = false;
 		let optionsMenuOpen = false;
+		/** @type {"msbyte"|"lsbyte"} */
+		let byteOrder = "msbyte";
 
 		let groupIdCounter = 0;
 		const groupColors = [
@@ -114,6 +117,19 @@ document.addEventListener("DOMContentLoaded", () => {
 				else row.classList.remove("lsb");
 			});
 			updateGroupsOutputs();
+		}
+
+		function applyByteOrder(order) {
+			const normalized = order === "lsbyte" ? "lsbyte" : "msbyte";
+			byteOrder = normalized;
+			if (byteOrderSelect) {
+				byteOrderSelect.value = normalized;
+			}
+			if (bytesContainer) {
+				if (normalized === "lsbyte") bytesContainer.classList.add("lsbyte");
+				else bytesContainer.classList.remove("lsbyte");
+			}
+			updateHexInputFromGrid();
 		}
 
 		function getBitCoordinates(bitEl) {
@@ -655,6 +671,7 @@ document.addEventListener("DOMContentLoaded", () => {
 				version: 1,
 				exportedAt: new Date().toISOString(),
 				bitOrder,
+				byteOrder,
 				bytes,
 				groups: groupsData,
 			};
@@ -743,6 +760,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
 				const order = payload.bitOrder === "lsb" ? "lsb" : "msb";
 				applyBitOrder(order);
+				const byteOrderValue = payload.byteOrder === "lsbyte" ? "lsbyte" : "msbyte";
+				applyByteOrder(byteOrderValue);
 
 				if (Array.isArray(payload.groups)) {
 					payload.groups.forEach(addGroupFromSerialized);
@@ -807,10 +826,11 @@ document.addEventListener("DOMContentLoaded", () => {
 		clearSelectedBtn.addEventListener("click", clearSelection);
 
 		function getBytesArrayFromGrid() {
-			const rows = bytesContainer.querySelectorAll(".byte-row");
+			const rows = Array.from(bytesContainer.querySelectorAll(".byte-row"));
+			const orderedRows = byteOrder === "lsbyte" ? rows.slice().reverse() : rows;
 			/** @type {number[]} */
 			const bytes = [];
-			rows.forEach((row) => {
+			orderedRows.forEach((row) => {
 				const bits = row.querySelectorAll(".bit");
 				let value = 0;
 				for (let i = 0; i < 8; i++) {
@@ -1077,6 +1097,12 @@ document.addEventListener("DOMContentLoaded", () => {
 		if (closeOptionsBtn) {
 			closeOptionsBtn.addEventListener("click", closeOptionsMenu);
 		}
+		if (byteOrderSelect) {
+			byteOrderSelect.addEventListener("change", () => {
+				const val = String(byteOrderSelect.value).toLowerCase();
+				applyByteOrder(val === "lsbyte" ? "lsbyte" : "msbyte");
+			});
+		}
 		selectModeCheckbox.addEventListener("change", () => {
 			if (selectModeCheckbox.checked) clearSelection();
 		});
@@ -1087,6 +1113,7 @@ document.addEventListener("DOMContentLoaded", () => {
 			});
 		}
 
+		applyByteOrder(byteOrder);
 		// initialize with one byte
 		addByte();
 		updateHexInputFromGrid();
