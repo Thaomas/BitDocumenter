@@ -1,3 +1,14 @@
+.section-head {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 16px;
+	flex-wrap: wrap;
+}
+.section-head h2 {
+	margin-bottom: 0;
+}
+
 /* Base reset */
 *,
 *::before,
@@ -280,19 +291,23 @@ main { flex: 1; }
 }
 .group-chip button:hover { color: var(--text); border-color: var(--text); }
 
-.import-export-root {
+.import-export-root,
+.options-root {
 	position: relative;
 	display: inline-block;
 }
-.import-export-toggle {
+.import-export-toggle,
+.options-toggle {
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
 }
-.import-export-menu[hidden] {
+.import-export-menu[hidden],
+.options-menu[hidden] {
 	display: none;
 }
-.import-export-menu {
+.import-export-menu,
+.options-menu {
 	position: absolute;
 	top: calc(100% + 8px);
 	right: 0;
@@ -303,11 +318,13 @@ main { flex: 1; }
 	transform: translateY(-6px);
 	transition: opacity 140ms ease, transform 140ms ease;
 }
-.import-export-menu.open {
+.import-export-menu.open,
+.options-menu.open {
 	opacity: 1;
 	transform: translateY(0);
 }
-.import-export-panel {
+.import-export-panel,
+.options-panel {
 	margin-top: 0;
 	display: grid;
 	gap: 12px;
@@ -317,7 +334,8 @@ main { flex: 1; }
 	background: var(--panel);
 	box-shadow: 0 18px 36px rgba(0,0,0,0.35);
 }
-.import-export-panel-head {
+.import-export-panel-head,
+.options-panel-head {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
@@ -343,10 +361,15 @@ main { flex: 1; }
 	background: rgba(255,255,255,0.06);
 }
 
-.import-export-panel h4 {
+.import-export-panel h4,
+.options-panel h4 {
 	margin: 0;
 	font-size: 14px;
 	color: var(--muted);
+}
+.options-panel-body {
+	display: grid;
+	gap: 10px;
 }
 .import-export-actions {
 	display: flex;

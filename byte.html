@@ -25,18 +25,36 @@
 	<main id="byteApp">
 		<section class="section">
 			<div class="container">
-				<h2>Interactive Byte Visualizer</h2>
+				<div class="section-head">
+					<h2>Interactive Byte Visualizer</h2>
+					<div class="options-root">
+						<button id="optionsToggle" class="btn-secondary options-toggle" type="button" aria-haspopup="true" aria-expanded="false">
+							Options
+						</button>
+						<div id="optionsMenu" class="options-menu" role="dialog" aria-modal="false" hidden>
+							<div class="options-panel">
+								<div class="options-panel-head">
+									<h4>Options</h4>
+									<button id="closeOptionsBtn" class="btn-icon" type="button" aria-label="Close options panel">&times;</button>
+								</div>
+								<div class="options-panel-body">
+									<label class="field">
+										<span>Bit order</span>
+										<select id="bitOrder" class="group-type">
+											<option value="msb">MSB → LSB</option>
+											<option value="lsb">LSB → MSB</option>
+										</select>
+									</label>
+									<p class="muted">Choose whether bit grouping reads from MSB or LSB first.</p>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
 				<p class="muted">Click any bit to toggle between 0 and 1. Add more bytes as needed.</p>
 
 				<div class="controls">
 					<input id="bytesHexInput" class="text-input" type="text" placeholder="Hex bytes (e.g., 0xFA3)" aria-label="Hex bytes input" />
-					<label class="toggle-select">
-						<span>Bit order</span>
-						<select id="bitOrder">
-							<option value="msb">MSB → LSB</option>
-							<option value="lsb">LSB → MSB</option>
-						</select>
-					</label>
 					<span class="divider"></span>
 					<label class="toggle-select">
 						<input id="selectMode" type="checkbox" />

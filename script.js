@@ -36,12 +36,16 @@ document.addEventListener("DOMContentLoaded", () => {
 		const importExportToggle = document.getElementById("importExportToggle");
 		const importExportMenu = document.getElementById("importExportMenu");
 		const closeImportExportBtn = document.getElementById("closeImportExportBtn");
+		const optionsToggle = document.getElementById("optionsToggle");
+		const optionsMenu = document.getElementById("optionsMenu");
+		const closeOptionsBtn = document.getElementById("closeOptionsBtn");
 
 		if (!bytesContainer || !addByteBtn || !removeByteBtn || !groupsContainer || !selectModeCheckbox || !groupSelectedBtn || !clearSelectedBtn || !groupLabelInput) return;
 
 		/** @type {"msb"|"lsb"} */
 		let bitOrder = "msb";
 		let importExportMenuOpen = false;
+		let optionsMenuOpen = false;
 
 		let groupIdCounter = 0;
 		const groupColors = [
@@ -949,6 +953,56 @@ document.addEventListener("DOMContentLoaded", () => {
 			else openImportExportMenu();
 		}
 
+		function handleOptionsDocumentPointerDown(event) {
+			if (!optionsMenu || !optionsToggle) return;
+			const target = event.target;
+			if (!(target instanceof Node)) return;
+			if (optionsMenu.contains(target) || optionsToggle.contains(target)) return;
+			closeOptionsMenu();
+		}
+
+		function handleOptionsDocumentKeyDown(event) {
+			if (event.key !== "Escape") return;
+			if (!optionsMenuOpen) return;
+			event.preventDefault();
+			closeOptionsMenu();
+			if (optionsToggle) optionsToggle.focus();
+		}
+
+		function openOptionsMenu() {
+			if (!optionsMenu || !optionsToggle) return;
+			if (optionsMenuOpen) return;
+			optionsMenu.hidden = false;
+			requestAnimationFrame(() => optionsMenu.classList.add("open"));
+			optionsToggle.setAttribute("aria-expanded", "true");
+			optionsMenuOpen = true;
+			document.addEventListener("pointerdown", handleOptionsDocumentPointerDown);
+			document.addEventListener("keydown", handleOptionsDocumentKeyDown);
+			if (bitOrderSelect) bitOrderSelect.focus();
+		}
+
+		function closeOptionsMenu() {
+			if (!optionsMenu || !optionsToggle) return;
+			if (!optionsMenuOpen) return;
+			optionsMenu.classList.remove("open");
+			optionsToggle.setAttribute("aria-expanded", "false");
+			optionsMenuOpen = false;
+			const onTransitionEnd = () => {
+				optionsMenu.hidden = true;
+			};
+			optionsMenu.addEventListener("transitionend", onTransitionEnd, { once: true });
+			setTimeout(() => {
+				if (!optionsMenuOpen) optionsMenu.hidden = true;
+			}, 180);
+			document.removeEventListener("pointerdown", handleOptionsDocumentPointerDown);
+			document.removeEventListener("keydown", handleOptionsDocumentKeyDown);
+		}
+
+		function toggleOptionsMenu() {
+			if (optionsMenuOpen) closeOptionsMenu();
+			else openOptionsMenu();
+		}
+
 		function applyHexBytesInput() {
 			if (!bytesHexInput) return;
 			let raw = bytesHexInput.value.trim();
@@ -1016,6 +1070,12 @@ document.addEventListener("DOMContentLoaded", () => {
 		}
 		if (closeImportExportBtn) {
 			closeImportExportBtn.addEventListener("click", closeImportExportMenu);
+		}
+		if (optionsToggle) {
+			optionsToggle.addEventListener("click", toggleOptionsMenu);
+		}
+		if (closeOptionsBtn) {
+			closeOptionsBtn.addEventListener("click", closeOptionsMenu);
 		}
 		selectModeCheckbox.addEventListener("change", () => {
 			if (selectModeCheckbox.checked) clearSelection();
