@@ -33,6 +33,7 @@ document.addEventListener("DOMContentLoaded", () => {
 		const configBase64Textarea = document.getElementById("configBase64");
 		const importExportStatus = document.getElementById("importExportStatus");
 		const exportIncludeSetBitsCheckbox = document.getElementById("exportIncludeSetBits");
+		const exportPdfBtn = document.getElementById("exportPdfBtn");
 		const importExportToggle = document.getElementById("importExportToggle");
 		const importExportMenu = document.getElementById("importExportMenu");
 		const closeImportExportBtn = document.getElementById("closeImportExportBtn");
@@ -687,6 +688,106 @@ document.addEventListener("DOMContentLoaded", () => {
 			return `bitdocumenter-${timestamp}.txt`;
 		}
 
+		function generatePdfFilename() {
+			const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+			return `bitdocumenter-groups-${timestamp}.pdf`;
+		}
+
+		function exportGroupsToPdf() {
+			try {
+				if (groups.size === 0) {
+					throw new Error("Create at least one group before exporting.");
+				}
+				const jspdfLib = window.jspdf;
+				if (!jspdfLib || typeof jspdfLib.jsPDF !== "function") {
+					throw new Error("PDF library failed to load.");
+				}
+				const doc = new jspdfLib.jsPDF({ unit: "pt", format: "a4" });
+				const margin = 48;
+				const lineHeight = 16;
+				const pageHeight = doc.internal.pageSize.getHeight();
+				const pageWidth = doc.internal.pageSize.getWidth();
+				const maxWidth = pageWidth - margin * 2;
+				let y = margin;
+
+				function ensureSpace(lines = 1) {
+					if (y + lineHeight * lines > pageHeight - margin) {
+						doc.addPage();
+						y = margin;
+					}
+				}
+
+				function appendLines(text, fontSize = 12, font = "helvetica", gap = lineHeight) {
+					if (!text) return;
+					doc.setFont(font, "normal");
+					doc.setFontSize(fontSize);
+					const lines = doc.splitTextToSize(text, maxWidth);
+					lines.forEach((line) => {
+						ensureSpace();
+						doc.text(line, margin, y);
+						y += gap;
+					});
+					y += 4;
+				}
+
+				function appendCodeBlock(text) {
+					if (!text) return;
+					doc.setFont("courier", "normal");
+					doc.setFontSize(10);
+					const lines = doc.splitTextToSize(text, maxWidth);
+					lines.forEach((line) => {
+						ensureSpace();
+						doc.text(line, margin, y);
+						y += lineHeight;
+					});
+					y += 6;
+				}
+
+				doc.setFont("helvetica", "bold");
+				doc.setFontSize(18);
+				doc.text("BitDocumenter Groups", margin, y);
+				y += lineHeight * 1.5;
+				doc.setFont("helvetica", "normal");
+				doc.setFontSize(11);
+				doc.text(`Generated: ${new Date().toLocaleString()}`, margin, y);
+				y += lineHeight * 2;
+
+				for (const group of groups.values()) {
+					ensureSpace(4);
+					doc.setFont("helvetica", "bold");
+					doc.setFontSize(14);
+					doc.text(group.label, margin, y);
+					y += lineHeight;
+					doc.setFont("helvetica", "normal");
+					doc.setFontSize(11);
+
+					const typeLabel = group.type === "value" ? "Value" : "Flags";
+					appendLines(`Type: ${typeLabel}`);
+					const bitSummary = group.bits.map((bit, idx) => {
+						const { byteIndex, bitIndex } = getBitCoordinates(bit);
+						return `#${idx + 1}: Byte ${byteIndex}, Bit ${bitIndex}`;
+					}).join("; ");
+					appendLines(`Bits: ${bitSummary || "None"}`);
+
+					if (group.type === "value") {
+						appendLines("Decode function:");
+						appendCodeBlock((group.decoderSource || defaultDecoder).trim());
+					} else {
+						appendLines("Flags description:");
+						appendCodeBlock((group.flagsDescriptionSource || defaultFlagsDescriptions).trim());
+					}
+
+					y += lineHeight;
+				}
+
+				doc.save(generatePdfFilename());
+				showImportExportStatus("Exported PDF with group decoders.", false);
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				showImportExportStatus(`PDF export failed: ${message}`, true);
+			}
+		}
+
 		function addGroupFromSerialized(groupData) {
 			if (!groupData || typeof groupData !== "object") return;
 			const bitCoords = Array.isArray(groupData.bits) ? groupData.bits : [];
@@ -1106,6 +1207,9 @@ document.addEventListener("DOMContentLoaded", () => {
 		selectModeCheckbox.addEventListener("change", () => {
 			if (selectModeCheckbox.checked) clearSelection();
 		});
+		if (exportPdfBtn) {
+			exportPdfBtn.addEventListener("click", exportGroupsToPdf);
+		}
 		if (bitOrderSelect) {
 			bitOrderSelect.addEventListener("change", () => {
 				const val = String(bitOrderSelect.value).toLowerCase();
