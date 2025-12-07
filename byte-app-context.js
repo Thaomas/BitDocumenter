@@ -3,6 +3,7 @@ const REQUIRED_IDS = [
 	"groupsContainer",
 	"addByteBtn",
 	"removeByteBtn",
+	"resetAllBtn",
 	"selectMode",
 	"groupSelectedBtn",
 	"clearSelectedBtn",

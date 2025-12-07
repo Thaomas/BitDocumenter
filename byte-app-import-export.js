@@ -1,5 +1,6 @@
 export function setupImportExport(ctx, gridApi, groupsApi) {
 	const { dom, groups, state } = ctx;
+	const LOCAL_STORAGE_KEY = "bitdocumenter-byte-visualizer-v1";
 
 	function showImportExportStatus(message, isError = false) {
 		if (!dom.importExportStatusEl) return;
@@ -173,6 +174,29 @@ export function setupImportExport(ctx, gridApi, groupsApi) {
 		}
 	}
 
+	function applyConfigurationPayload(payload) {
+		if (!payload || typeof payload !== "object") {
+			throw new Error("Configuration payload is malformed.");
+		}
+
+		const bytes = Array.isArray(payload.bytes) ? payload.bytes : undefined;
+		groupsApi.clearAllGroups();
+		gridApi.setBytesFromArray(bytes);
+
+		const order = payload.bitOrder === "lsb" ? "lsb" : "msb";
+		gridApi.applyBitOrder(order);
+		const byteOrderValue = payload.byteOrder === "lsbyte" ? "lsbyte" : "msbyte";
+		gridApi.applyByteOrder(byteOrderValue);
+
+		if (Array.isArray(payload.groups)) {
+			payload.groups.forEach(groupsApi.addGroupFromSerialized);
+		}
+		groupsApi.renderGroups();
+		groupsApi.updateGroupsOutputs();
+		gridApi.updateSelectionControls();
+		gridApi.updateRemoveVisibility();
+	}
+
 	function importConfigurationFromBase64(base64Text) {
 		try {
 			const normalized = (base64Text || "").replace(/\s+/g, "");
@@ -181,26 +205,7 @@ export function setupImportExport(ctx, gridApi, groupsApi) {
 			}
 			const decoded = decodeFromBase64Utf8(normalized);
 			const payload = JSON.parse(decoded);
-			if (!payload || typeof payload !== "object") {
-				throw new Error("Configuration payload is malformed.");
-			}
-
-			const bytes = Array.isArray(payload.bytes) ? payload.bytes : undefined;
-			groupsApi.clearAllGroups();
-			gridApi.setBytesFromArray(bytes);
-
-			const order = payload.bitOrder === "lsb" ? "lsb" : "msb";
-			gridApi.applyBitOrder(order);
-			const byteOrderValue = payload.byteOrder === "lsbyte" ? "lsbyte" : "msbyte";
-			gridApi.applyByteOrder(byteOrderValue);
-
-			if (Array.isArray(payload.groups)) {
-				payload.groups.forEach(groupsApi.addGroupFromSerialized);
-			}
-			groupsApi.renderGroups();
-			groupsApi.updateGroupsOutputs();
-			gridApi.updateSelectionControls();
-			gridApi.updateRemoveVisibility();
+			applyConfigurationPayload(payload);
 			showImportExportStatus("Import successful.", false);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
@@ -311,9 +316,60 @@ export function setupImportExport(ctx, gridApi, groupsApi) {
 		dom.exportPdfBtnEl.addEventListener("click", exportGroupsToPdf);
 	}
 
+	function saveConfigurationToLocalStorage() {
+		try {
+			const payload = buildExportPayload(true);
+			const json = JSON.stringify(payload);
+			if (typeof window !== "undefined" && window.localStorage) {
+				window.localStorage.setItem(LOCAL_STORAGE_KEY, json);
+			}
+		} catch (error) {
+			console.error("Error saving configuration to local storage:", error);
+			// Ignore persistence errors
+		}
+	}
+
+	function loadConfigurationFromLocalStorage() {
+		try {
+			if (typeof window === "undefined" || !window.localStorage) return false;
+			const json = window.localStorage.getItem(LOCAL_STORAGE_KEY);
+			if (!json) return false;
+			const payload = JSON.parse(json);
+			applyConfigurationPayload(payload);
+			showImportExportStatus("Restored last session from this browser.", false);
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
+	function clearConfigurationFromLocalStorage() {
+		try {
+			if (typeof window === "undefined" || !window.localStorage) return;
+			window.localStorage.removeItem(LOCAL_STORAGE_KEY);
+		} catch {
+			// Ignore persistence errors
+		}
+	}
+
+	let autosaveTimer = null;
+	if (typeof window !== "undefined") {
+		// Fallback: still attempt to save right before unload
+		if (window.addEventListener) {
+			window.addEventListener("beforeunload", saveConfigurationToLocalStorage);
+		}
+		// Primary autosave: persist the current configuration once per second
+		autosaveTimer = window.setInterval(() => {
+			saveConfigurationToLocalStorage();
+		}, 1000);
+	}
+
 	return {
 		showImportExportStatus,
 		importConfigurationFromBase64,
+		saveConfigurationToLocalStorage,
+		loadConfigurationFromLocalStorage,
+		clearConfigurationFromLocalStorage,
 	};
 }
 
